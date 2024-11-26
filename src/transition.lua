@@ -147,6 +147,10 @@ function Transition.new()
         end
     end
 
+    function self:isActive()
+        return self.active
+    end
+
     function self:draw()
         if not self.active then return end
 

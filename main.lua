@@ -46,7 +46,7 @@ function love.update(dt)
     end
     
     -- Skip all updates when terminal is active
-    if terminal and terminal.active then
+    if (terminal and terminal.active) or (transition and transition:isActive()) then
         return
     end
 
@@ -125,6 +125,11 @@ function love.draw()
 end
 
 function love.keypressed(key)
+    -- Block all keyboard interactions during transition
+    if transition and transition:isActive() then
+        return
+    end
+    
     -- Check for terminal toggle first
     if key == "`" then
         if terminal then
@@ -182,6 +187,11 @@ function love.keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
+    -- Block all mouse interactions during transition
+    if transition and transition:isActive() then
+        return
+    end
+    
     -- Skip mouse input if terminal is active
     if terminal and terminal.active then
         return
