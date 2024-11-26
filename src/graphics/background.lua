@@ -43,7 +43,7 @@ function BackgroundManager.new()
     
     -- Initialize background snake
     self.bg_snake_pos = {}
-    -- Calculate grid dimensions based on window size
+    -- Calculate exact grid dimensions to fit window
     self.window_grid_width = math.floor(constants.WINDOW_WIDTH / constants.GRID_SIZE)
     self.window_grid_height = math.floor(constants.WINDOW_HEIGHT / constants.GRID_SIZE)
     
@@ -55,6 +55,9 @@ function BackgroundManager.new()
     self.particles = {}
     self.last_particle_time = love.timer.getTime()
     self.particle_delay = 0.1
+    
+    -- Border visibility flag
+    self.show_border = false
     
     for i = 1, 5 do
         table.insert(self.bg_snake_pos, {
@@ -93,47 +96,50 @@ function BackgroundManager:update(dt)
         local new_x = head.x + self.bg_snake_dir.x
         local new_y = head.y + self.bg_snake_dir.y
         
-        -- Turn around at window edges
-        if new_x < 0 or new_x >= self.window_grid_width or new_y < 0 or new_y >= self.window_grid_height then
-            self.bg_snake_dir.x = -self.bg_snake_dir.x
-            self.bg_snake_dir.y = -self.bg_snake_dir.y
-            new_x = head.x + self.bg_snake_dir.x
-            new_y = head.y + self.bg_snake_dir.y
+        -- Wrap around screen edges
+        if new_x < 0 then
+            new_x = self.window_grid_width - 1
+        elseif new_x >= self.window_grid_width then
+            new_x = 0
         end
         
-        -- Randomly change direction
+        if new_y < 0 then
+            new_y = self.window_grid_height - 1
+        elseif new_y >= self.window_grid_height then
+            new_y = 0
+        end
+        
+        -- Randomly change direction (but don't check boundaries since we wrap)
         if love.math.random() < 0.1 then
-            local next_x = new_x + self.bg_snake_dir.x
-            local next_y = new_y + self.bg_snake_dir.y
-            if next_x >= 0 and next_x < self.window_grid_width and 
-               next_y >= 0 and next_y < self.window_grid_height then
-                local possible_dirs = {
-                    {x = 0, y = 1}, {x = 0, y = -1},
-                    {x = 1, y = 0}, {x = -1, y = 0}
-                }
-                -- Remove opposite direction
-                for i, dir in ipairs(possible_dirs) do
-                    if dir.x == -self.bg_snake_dir.x and dir.y == -self.bg_snake_dir.y then
-                        table.remove(possible_dirs, i)
-                        break
-                    end
+            local possible_dirs = {
+                {x = 0, y = 1}, {x = 0, y = -1},
+                {x = 1, y = 0}, {x = -1, y = 0}
+            }
+            -- Remove opposite direction
+            for i, dir in ipairs(possible_dirs) do
+                if dir.x == -self.bg_snake_dir.x and dir.y == -self.bg_snake_dir.y then
+                    table.remove(possible_dirs, i)
+                    break
                 end
-                local new_dir = possible_dirs[love.math.random(#possible_dirs)]
-                self.bg_snake_dir = new_dir
             end
+            local new_dir = possible_dirs[love.math.random(#possible_dirs)]
+            self.bg_snake_dir = new_dir
         end
         
+        -- Add new head position
         table.insert(self.bg_snake_pos, 1, {x = new_x, y = new_y})
         table.remove(self.bg_snake_pos)
+        
+        -- Create particle at new position
+        if current_time - self.last_particle_time >= self.particle_delay then
+            table.insert(self.particles, Particle.new(
+                new_x * constants.GRID_SIZE,
+                new_y * constants.GRID_SIZE
+            ))
+            self.last_particle_time = current_time
+        end
+        
         self.last_move_time = current_time
-    end
-    
-    -- Add new particles
-    if current_time - self.last_particle_time >= self.particle_delay then
-        local x = love.math.random(constants.OFFSET_X, constants.WINDOW_WIDTH - constants.OFFSET_X)
-        local y = love.math.random(constants.OFFSET_Y, constants.WINDOW_HEIGHT - constants.OFFSET_Y)
-        table.insert(self.particles, Particle.new(x, y))
-        self.last_particle_time = current_time
     end
     
     -- Update particles
@@ -143,8 +149,8 @@ function BackgroundManager:update(dt)
         end
     end
     
-    -- Update grid colors
-    self.color_transition = self.color_transition + self.color_change_speed
+    -- Update grid color transition
+    self.color_transition = self.color_transition + dt * self.color_change_speed
     if self.color_transition >= 1 then
         self.color_transition = 0
         self.current_grid_colors = (self.current_grid_colors % #self.grid_colors) + 1
@@ -169,24 +175,35 @@ function BackgroundManager:draw()
         end
     end
     
-    -- Calculate full window grid dimensions
-    local full_grid_width = math.ceil(constants.WINDOW_WIDTH / constants.GRID_SIZE)
-    local full_grid_height = math.ceil(constants.WINDOW_HEIGHT / constants.GRID_SIZE)
-    
-    -- Draw background grid
-    for y = 0, full_grid_height - 1 do
-        for x = 0, full_grid_width - 1 do
+    -- Draw background grid exactly fitting window dimensions
+    for y = 0, self.window_grid_height - 1 do
+        for x = 0, self.window_grid_width - 1 do
             local color = interpolated_colors[((x + y) % 2) + 1]
             local rect_x = x * constants.GRID_SIZE
             local rect_y = y * constants.GRID_SIZE
             
-            if rect_x + constants.GRID_SIZE > 0 and rect_x < constants.WINDOW_WIDTH and 
-               rect_y + constants.GRID_SIZE > 0 and rect_y < constants.WINDOW_HEIGHT then
-                love.graphics.setColor(unpack(color))
-                love.graphics.rectangle('fill', rect_x, rect_y,
-                                     constants.GRID_SIZE, constants.GRID_SIZE)
-            end
+            love.graphics.setColor(unpack(color))
+            love.graphics.rectangle('fill', rect_x, rect_y,
+                                 constants.GRID_SIZE, constants.GRID_SIZE)
         end
+    end
+    
+    -- Draw border around the grid if enabled
+    if self.show_border then
+        local border_thickness = 2
+        love.graphics.setColor(constants.SNAKE_GREEN)
+        -- Top border
+        love.graphics.rectangle('fill', 0, 0, 
+                              constants.WINDOW_WIDTH, border_thickness)
+        -- Bottom border
+        love.graphics.rectangle('fill', 0, constants.WINDOW_HEIGHT - border_thickness, 
+                              constants.WINDOW_WIDTH, border_thickness)
+        -- Left border
+        love.graphics.rectangle('fill', 0, 0, 
+                              border_thickness, constants.WINDOW_HEIGHT)
+        -- Right border
+        love.graphics.rectangle('fill', constants.WINDOW_WIDTH - border_thickness, 0, 
+                              border_thickness, constants.WINDOW_HEIGHT)
     end
     
     -- Draw particles behind snake
@@ -194,11 +211,11 @@ function BackgroundManager:draw()
         particle:draw()
     end
     
-    -- Draw snake with proper offsets
+    -- Draw snake
     for i, pos in ipairs(self.bg_snake_pos) do
         local color = i == 1 and {0, 100/255, 0} or {0, 80/255, 0}
-        local screen_x = constants.OFFSET_X + (pos.x * constants.GRID_SIZE)
-        local screen_y = constants.OFFSET_Y + (pos.y * constants.GRID_SIZE)
+        local screen_x = pos.x * constants.GRID_SIZE
+        local screen_y = pos.y * constants.GRID_SIZE
         love.graphics.setColor(unpack(color))
         love.graphics.rectangle('fill',
             screen_x + constants.SNAKE_PADDING,
@@ -207,8 +224,12 @@ function BackgroundManager:draw()
             constants.GRID_SIZE - 2 * constants.SNAKE_PADDING)
     end
     
-    -- Reset color
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function BackgroundManager:toggle_border()
+    self.show_border = not self.show_border
+    return self.show_border
 end
 
 return BackgroundManager

@@ -3,6 +3,7 @@
 
 local Terminal = {}
 local constants = require('src.constants')
+local BackgroundManager = require('src.graphics.background')
 
 function Terminal.new()
     local self = {
@@ -19,6 +20,7 @@ function Terminal.new()
         max_history = 50,   -- Increased history limit
         line_height = 20,    -- Height of each line in pixels
         was_paused = false,  -- Track if game was already paused
+        background_manager = BackgroundManager.new(),
     }
 
     -- Font for the terminal and FPS display
@@ -99,6 +101,7 @@ function Terminal.new()
         elseif cmd == "help" then
             output = [[Available commands:
 show_fps     Toggle FPS display
+show_border  Toggle menu background border
 help         Show this help message
 clear        Clear terminal
 exit         Close terminal
@@ -112,6 +115,9 @@ whoami       Display current user]]
             output = "Terminal closed"
         elseif cmd == "whoami" then
             output = self.username
+        elseif cmd == "show_border" then
+            local is_enabled = self.background_manager:toggle_border()
+            output = string.format("Menu background border %s", is_enabled and "enabled" or "disabled")
         else
             output = "Command not found: " .. command
         end
