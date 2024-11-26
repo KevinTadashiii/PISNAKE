@@ -10,6 +10,7 @@ local HUD = require("src.ui.hud")
 local Grid = require("src.ui.grid")
 local InputHandler = require("src.input.input_handler")
 local SettingsManager = require("src.settings.settings_manager")
+local BackgroundEffect = require("src.background_effect")
 
 local GameState = {}
 GameState.__index = GameState
@@ -51,6 +52,7 @@ function GameState.new()
     self.retro_mode = false
     self.last_move_time = love.timer.getTime()
     self.retro_canvas = nil
+    self.background_effect = BackgroundEffect.new()  -- Add background effect
     
     -- Initialize input handler
     self.input_handler = InputHandler.new(self)
@@ -69,7 +71,7 @@ end
 
 function GameState:update_sound_volumes()
     local volume = self.settings_manager:get_setting('sound_volume') / 100.0
-    self.game_over_sound:setVolume(0.2 * volume)
+    self.game_over_sound:setVolume(0.7 * volume)
     for _, sound in ipairs(self.eat_sounds) do
         sound:setVolume(0.5 * volume)
     end
@@ -104,6 +106,9 @@ function GameState:update(dt)
     end
 
     if not self.game_over and not self.paused then
+        -- Update background effect
+        self.background_effect:update(dt)
+        
         -- Update snake with dt
         if not self.snake:update(dt) then
             self.game_over = true
@@ -137,9 +142,15 @@ function GameState:draw()
         self.retro_canvas = love.graphics.newCanvas(constants.WINDOW_WIDTH, constants.WINDOW_HEIGHT)
     end
     
-    -- Fill background
-    love.graphics.setBackgroundColor(constants.BACKGROUND_COLOR)
+    -- Fill background with base color
+    love.graphics.setBackgroundColor(unpack(constants.BACKGROUND_COLOR))
     love.graphics.clear()
+
+    -- Draw background effect before anything else
+    self.background_effect:draw()
+    
+    -- Draw game grid
+    self.grid:draw()
     
     if self.retro_mode then
         -- Draw everything to the canvas first
@@ -148,7 +159,6 @@ function GameState:draw()
     end
     
     -- Draw game elements
-    self.grid:draw()
     self.snake:draw()
     self.food:draw()
     self.hud:draw({score = self.score})
