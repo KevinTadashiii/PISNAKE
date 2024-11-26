@@ -1,7 +1,7 @@
 local constants = {}
 
 constants.WINDOW_WIDTH = 800
-constants.WINDOW_HEIGHT = 600
+constants.WINDOW_HEIGHT = 608
 constants.GRID_SIZE = 32
 constants.GRID_WIDTH = 17
 constants.GRID_HEIGHT = 17
