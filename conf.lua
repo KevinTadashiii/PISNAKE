@@ -1,5 +1,5 @@
 function love.conf(t)
-    t.window.title = "PIsnake"
+    t.window.title = "PISNAKE"
     t.window.width = 800
     t.window.height = 600
     t.window.resizable = false
@@ -9,7 +9,7 @@ function love.conf(t)
     t.modules.touch = false
     
     t.version = "11.4"
-    t.console = true
+    t.console = false
     
     t.window.vsync = true
     t.window.msaa = 0
