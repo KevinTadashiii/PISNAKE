@@ -14,8 +14,18 @@ function SettingsManager.new(force_reload)
 
     local self = setmetatable({}, SettingsManager)
     
-    -- Store settings in assets/data directory
-    self.settings_file = 'assets/data/settings.json'
+    -- Get the appropriate save directory
+    local save_dir = love.filesystem.getSourceBaseDirectory()
+    if love.filesystem.isFused() then
+        -- If running as executable, use save directory
+        save_dir = love.filesystem.getSaveDirectory()
+    end
+    
+    -- Ensure the data directory exists
+    love.filesystem.createDirectory("data")
+    
+    -- Store settings in the appropriate location
+    self.settings_file = 'data/settings.json'
     
     self.default_settings = {
         sound_volume = 100
@@ -34,24 +44,23 @@ end
 
 function SettingsManager:load_settings()
     -- Load settings from file or create with defaults if not exists
-    local file = io.open(self.settings_file, "r")
-    if file then
-        local contents = file:read("*all")
-        file:close()
-        
-        if contents and contents ~= "" then
-            -- Parse JSON
-            local settings = {}
-            for k, v in string.gmatch(contents, '"([^"]+)"%s*:%s*([%d%.]+)') do
-                settings[k] = tonumber(v)
-            end
-            -- Ensure all default settings exist
-            local final_settings = {}
-            for k, v in pairs(self.default_settings) do
-                final_settings[k] = settings[k] or v
-            end
-            return final_settings
+    local contents
+    if love.filesystem.getInfo(self.settings_file) then
+        contents = love.filesystem.read(self.settings_file)
+    end
+    
+    if contents and contents ~= "" then
+        -- Parse JSON
+        local settings = {}
+        for k, v in string.gmatch(contents, '"([^"]+)"%s*:%s*([%d%.]+)') do
+            settings[k] = tonumber(v)
         end
+        -- Ensure all default settings exist
+        local final_settings = {}
+        for k, v in pairs(self.default_settings) do
+            final_settings[k] = settings[k] or v
+        end
+        return final_settings
     end
     
     -- If we get here, either file doesn't exist, is empty, or parsing failed
@@ -71,12 +80,9 @@ function SettingsManager:save_settings()
     end
     json = json .. table.concat(items, ",\n") .. "\n}"
     
-    local file = io.open(self.settings_file, "w")
-    if file then
-        file:write(json)
-        file:close()
-    else
-        print("Error: Could not open settings file for writing")
+    local success, message = love.filesystem.write(self.settings_file, json)
+    if not success then
+        print("Error: Could not save settings file - " .. tostring(message))
     end
 end
 
