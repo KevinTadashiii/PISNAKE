@@ -39,7 +39,7 @@ function SettingsManager:load_settings()
         local contents = file:read("*all")
         file:close()
         
-        if contents then
+        if contents and contents ~= "" then
             -- Parse JSON
             local settings = {}
             for k, v in string.gmatch(contents, '"([^"]+)"%s*:%s*([%d%.]+)') do
@@ -54,9 +54,12 @@ function SettingsManager:load_settings()
         end
     end
     
-    -- Create initial settings file with defaults
+    -- If we get here, either file doesn't exist, is empty, or parsing failed
+    -- Return a copy of default settings and save them
+    local default_copy = self:copy_table(self.default_settings)
+    self.settings = default_copy  -- Set settings before saving
     self:save_settings()
-    return self:copy_table(self.default_settings)
+    return default_copy
 end
 
 function SettingsManager:save_settings()
