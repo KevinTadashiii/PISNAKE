@@ -1,114 +1,144 @@
--- Pause menu implementation for the snake game
+-- PauseMenu Module --
 
 local constants = require("src.constants")
 local SettingsManager = require("src.settings.settings_manager")
 
+-- Menu configuration constants
+local UI = {
+    MENU = {
+        OPTIONS = {'Resume', 'Main Menu'},
+        SPACING = 60,
+        HIT_WIDTH = 200,
+        BASE_FONT_SIZE = 24,
+        ARROW_PADDING = 20
+    },
+    TITLE = {
+        FONT_SIZE = 36,
+        Y_POSITION = 1/4,  -- Fraction of screen height
+        SHADOW_OFFSET = 2
+    },
+    SCORE = {
+        FONT_SIZE = 16,
+        Y_POSITION = 1/2  -- Fraction of screen height
+    },
+    ANIMATION = {
+        HOVER_SCALE = 1.2,
+        SCALE_SPEED = 0.2,
+        COLOR_SPEED = 0.1,
+        HOVER_SOUNDS = 3,  -- Number of sound sources for hover effect
+        SOUND_VOLUME_MULT = 1.4
+    },
+}
+
 local PauseMenu = {}
 PauseMenu.__index = PauseMenu
 
+-- Initialize a new pause menu instance
 function PauseMenu.new()
     local self = setmetatable({}, PauseMenu)
-    self.options = {'Resume', 'Main Menu'}
-    self.selected = 1  -- Lua uses 1-based indexing
-    self.using_keyboard = false  -- Track if keyboard was last used
-    self.mouse_interacting = false  -- Track if mouse is actually interacting with menu
-    self.keyboard_priority = false  -- Track if keyboard should have priority
-    self.last_mx = nil  -- Track last mouse x position
-    self.last_my = nil  -- Track last mouse y position
+    
+    -- Menu state
+    self.options = UI.MENU.OPTIONS
+    self.selected = 1
+    self.using_keyboard = false
+    self.mouse_interacting = false
+    self.keyboard_priority = false
+    self.last_mx = nil
+    self.last_my = nil
     
     -- Load fonts
-    self.title_font = love.graphics.newFont(constants.FONT_PATH, 36)
-    self.option_font = love.graphics.newFont(constants.FONT_PATH, 24)
-    self.score_font = love.graphics.newFont(constants.FONT_PATH, 16)
+    self.title_font = love.graphics.newFont(constants.FONT_PATH, UI.TITLE.FONT_SIZE)
+    self.option_font = love.graphics.newFont(constants.FONT_PATH, UI.MENU.BASE_FONT_SIZE)
+    self.score_font = love.graphics.newFont(constants.FONT_PATH, UI.SCORE.FONT_SIZE)
     
-    -- Dynamic menu properties
+    -- Initialize animation arrays
     self.option_scales = {}
     self.option_colors = {}
     self.target_scales = {}
     self.target_colors = {}
     
-    -- Initialize arrays
     for i = 1, #self.options do
         self.option_scales[i] = 1.0
-        self.option_colors[i] = {1, 1, 1}  -- WHITE in LÖVE uses values from 0 to 1
+        self.option_colors[i] = {1, 1, 1} 
         self.target_scales[i] = 1.0
         self.target_colors[i] = {1, 1, 1}
     end
     
-    self.hover_scale = 1.2  -- Maximum scale when hovering
-    self.animation_speed = 0.2  -- Speed of scale animation
-    self.color_speed = 0.1  -- Speed of color transition
+    -- Animation properties
+    self.hover_scale = UI.ANIMATION.HOVER_SCALE
+    self.animation_speed = UI.ANIMATION.SCALE_SPEED
+    self.color_speed = UI.ANIMATION.COLOR_SPEED
     
-    -- Load sound effects
-    self.settings_manager = SettingsManager.new()
-    -- Create multiple hover sounds for rapid playback
-    self.hover_sounds = {}
-    for i = 1, 3 do  -- Create 3 sound sources
-        self.hover_sounds[i] = love.audio.newSource(constants.HOVER_SOUND_PATH, "static")
-        local volume = self.settings_manager:get_setting('sound_volume') or 70
-        self.hover_sounds[i]:setVolume(1.4 * (volume / 100))
-    end
-    self.current_sound = 1
+    -- Initialize sound effects
+    self:init_sound_effects()
     
-    -- Initialize hover effect for the first selected item
+    -- Set initial hover effect
     self:_update_hover_effects()
     
-    -- Disable key repeat
+    -- Disable key repeat for menu navigation
     love.keyboard.setKeyRepeat(false)
     
     return self
 end
 
-function PauseMenu:_update_hover_effects()
-    -- Skip hover effects if terminal is active
-    if terminal and terminal.active then
-        return
+-- Initialize sound effects for menu interaction
+function PauseMenu:init_sound_effects()
+    self.settings_manager = SettingsManager.new()
+    self.hover_sounds = {}
+    
+    local volume = self.settings_manager:get_setting('sound_volume') or 70
+    local adjusted_volume = UI.ANIMATION.SOUND_VOLUME_MULT * (volume / 100)
+    
+    for i = 1, UI.ANIMATION.HOVER_SOUNDS do
+        self.hover_sounds[i] = love.audio.newSource(constants.HOVER_SOUND_PATH, "static")
+        self.hover_sounds[i]:setVolume(adjusted_volume)
     end
+    self.current_sound = 1
+end
 
-    -- Update hover effects for menu options
+-- Update hover effects for menu options
+function PauseMenu:_update_hover_effects()
+    if terminal and terminal.active then return end
+    
     for i = 1, #self.options do
         if i == self.selected then
             self.target_scales[i] = self.hover_scale
-            self.target_colors[i] = {1, 1, 0}  -- Yellow in LÖVE2D
+            self.target_colors[i] = {1, 1, 0}
         else
             self.target_scales[i] = 1.0
-            self.target_colors[i] = {1, 1, 1}  -- White in LÖVE2D
+            self.target_colors[i] = {1, 1, 1}
         end
     end
 end
 
+-- Handle keyboard input for menu navigation
 function PauseMenu:handle_input(key)
-    -- Handle keyboard input
-    if key then
-        -- Switch to keyboard mode and give it priority
-        self.using_keyboard = true
-        self.mouse_interacting = false
-        self.keyboard_priority = true
-        
-        if key == "escape" then
-            return 'Resume'
-        elseif key == "up" then
-            self.selected = ((self.selected - 2) % #self.options) + 1
-            self:_update_hover_effects()
-            self:play_hover_sound()
-        elseif key == "down" then
-            self.selected = (self.selected % #self.options) + 1
-            self:_update_hover_effects()
-            self:play_hover_sound()
-        elseif key == "return" then
-            return self.options[self.selected]
-        end
+    if not key then return nil end
+    
+    self.using_keyboard = true
+    self.mouse_interacting = false
+    self.keyboard_priority = true
+    
+    if key == "escape" then
+        return 'Resume'
+    elseif key == "up" then
+        self.selected = ((self.selected - 2) % #self.options) + 1
+        self:_update_hover_effects()
+        self:play_hover_sound()
+    elseif key == "down" then
+        self.selected = (self.selected % #self.options) + 1
+        self:_update_hover_effects()
+        self:play_hover_sound()
+    elseif key == "return" then
+        return self.options[self.selected]
     end
     return nil
 end
 
+-- Play hover sound effect with multiple sound sources
 function PauseMenu:play_hover_sound()
-    -- Skip playing sound if terminal is active
-    if terminal and terminal.active then
-        return
-    end
+    if terminal and terminal.active then return end
     
-    -- Find the next available (not playing) sound source
     local found = false
     local start = self.current_sound
     repeat
@@ -118,110 +148,100 @@ function PauseMenu:play_hover_sound()
             self.current_sound = (self.current_sound % #self.hover_sounds) + 1
         end
     until found or self.current_sound == start
-
-    -- If we found a free sound source, play it
+    
     if found then
         self.hover_sounds[self.current_sound]:play()
         self.current_sound = (self.current_sound % #self.hover_sounds) + 1
     end
 end
 
+-- Handle mouse movement and hover effects
 function PauseMenu:handle_mouse(mx, my)
-    -- Track mouse movement to reset keyboard priority
+    self:update_mouse_position(mx, my)
+    if terminal and terminal.active then return nil end
+    
+    local is_over_menu = false
+    for i, option in ipairs(self.options) do
+        local option_y = constants.WINDOW_HEIGHT / 2 + 60 + (i - 1) * UI.MENU.SPACING
+        local bounds = self:get_option_bounds(i, option_y)
+        
+        if self:is_mouse_over_option(mx, my, bounds) then
+            is_over_menu = true
+            if not self.keyboard_priority then
+                self:handle_option_hover(i)
+            end
+            break
+        end
+    end
+    
+    self.mouse_interacting = is_over_menu
+    return nil
+end
+
+-- Update stored mouse position
+function PauseMenu:update_mouse_position(mx, my)
     if not self.last_mx then
         self.last_mx = mx
         self.last_my = my
     end
     
-    -- Reset keyboard priority if mouse has moved significantly
     if math.abs(mx - self.last_mx) > 1 or math.abs(my - self.last_my) > 1 then
         self.keyboard_priority = false
     end
     
     self.last_mx = mx
     self.last_my = my
-
-    -- Skip hover effects if terminal is active
-    if terminal and terminal.active then
-        return nil
-    end
-
-    -- Handle mouse movement and clicks
-    local menu_spacing = 60
-    local old_selected = self.selected
-    local is_over_menu = false
-    
-    for i, option in ipairs(self.options) do
-        local hit_width = 200
-        local option_x = constants.WINDOW_WIDTH / 2
-        local option_y = constants.WINDOW_HEIGHT / 2 + 60 + (i - 1) * menu_spacing
-        
-        -- Calculate bounds
-        local top_bound = option_y - menu_spacing/2
-        local bottom_bound = option_y + menu_spacing/2
-        
-        -- Adjust bounds for first and last options
-        if i == 1 then
-            top_bound = option_y - menu_spacing/4
-        elseif i == #self.options then
-            bottom_bound = option_y + menu_spacing/2
-        end
-        
-        -- Check if mouse is within the hit area
-        if mx >= option_x - hit_width/2 and mx <= option_x + hit_width/2 and
-           my >= top_bound and my <= bottom_bound then
-            is_over_menu = true
-            if not self.keyboard_priority then  -- Only interact if keyboard doesn't have priority
-                self.mouse_interacting = true
-                self.using_keyboard = false
-                
-                if self.selected ~= i then
-                    self.selected = i
-                    self:_update_hover_effects()
-                    self:play_hover_sound()
-                end
-            end
-            break
-        end
-    end
-    
-    -- If mouse moved away from menu, stop mouse interaction
-    if not is_over_menu then
-        self.mouse_interacting = false
-    end
-    
-    return nil
 end
 
+-- Calculate bounds for a menu option
+function PauseMenu:get_option_bounds(index, y)
+    local top = y - UI.MENU.SPACING/2
+    local bottom = y + UI.MENU.SPACING/2
+    
+    if index == 1 then
+        top = y - UI.MENU.SPACING/4
+    elseif index == #self.options then
+        bottom = y + UI.MENU.SPACING/2
+    end
+    
+    return {
+        top = top,
+        bottom = bottom,
+        left = constants.WINDOW_WIDTH/2 - UI.MENU.HIT_WIDTH/2,
+        right = constants.WINDOW_WIDTH/2 + UI.MENU.HIT_WIDTH/2
+    }
+end
+
+-- Check if mouse is over a menu option
+function PauseMenu:is_mouse_over_option(mx, my, bounds)
+    return mx >= bounds.left and mx <= bounds.right and
+           my >= bounds.top and my <= bounds.bottom
+end
+
+-- Handle hover effect for a menu option
+function PauseMenu:handle_option_hover(index)
+    self.mouse_interacting = true
+    self.using_keyboard = false
+    
+    if self.selected ~= index then
+        self.selected = index
+        self:_update_hover_effects()
+        self:play_hover_sound()
+    end
+end
+
+-- Handle mouse click events
 function PauseMenu:mousepressed(x, y, button)
-    -- Reset keyboard priority if mouse has moved significantly
     if self.last_mx and (math.abs(x - self.last_mx) > 1 or math.abs(y - self.last_my) > 1) then
         self.keyboard_priority = false
     end
 
-    if button == 1 and not self.keyboard_priority then  -- Left click and no keyboard priority
-        -- Handle mouse movement and clicks
-        local menu_spacing = 60
-        
+    if button == 1 and not self.keyboard_priority then
         for i, option in ipairs(self.options) do
-            local hit_width = 200
-            local option_x = constants.WINDOW_WIDTH / 2
-            local option_y = constants.WINDOW_HEIGHT / 2 + 60 + (i-1) * menu_spacing
+            local option_y = constants.WINDOW_HEIGHT/2 + 60 + (i-1) * UI.MENU.SPACING
+            local bounds = self:get_option_bounds(i, option_y)
             
-            -- Calculate bounds
-            local top_bound = option_y - menu_spacing/2
-            local bottom_bound = option_y + menu_spacing/2
-            
-            -- Adjust bounds for first and last options
-            if i == 1 then
-                top_bound = option_y - menu_spacing/4
-            elseif i == #self.options then
-                bottom_bound = option_y + menu_spacing/2
-            end
-            
-            -- Check if mouse is within the hit area
-            if x >= option_x - hit_width/2 and x <= option_x + hit_width/2 and
-               y >= top_bound and y <= bottom_bound then
+            if self:is_mouse_over_option(x, y, bounds) then
                 self.mouse_interacting = true
                 self.using_keyboard = false
                 return self.options[i]
@@ -231,66 +251,79 @@ function PauseMenu:mousepressed(x, y, button)
     return nil
 end
 
+-- Handle mouse movement events
 function PauseMenu:mousemoved(x, y, dx, dy)
     self:handle_mouse(x, y)
 end
 
+-- Update menu animations
 function PauseMenu:update(dt)
-    -- Update option scales with smooth animation
     for i = 1, #self.options do
         -- Scale animation
-        if self.option_scales[i] ~= self.target_scales[i] then
-            local diff = self.target_scales[i] - self.option_scales[i]
-            self.option_scales[i] = self.option_scales[i] + diff * self.animation_speed
-        end
+        local scale_diff = self.target_scales[i] - self.option_scales[i]
+        self.option_scales[i] = self.option_scales[i] + scale_diff * self.animation_speed
         
         -- Color animation
         for j = 1, 3 do
-            if self.option_colors[i][j] ~= self.target_colors[i][j] then
-                local diff = self.target_colors[i][j] - self.option_colors[i][j]
-                self.option_colors[i][j] = self.option_colors[i][j] + diff * self.color_speed
-            end
+            local color_diff = self.target_colors[i][j] - self.option_colors[i][j]
+            self.option_colors[i][j] = self.option_colors[i][j] + color_diff * self.color_speed
         end
     end
 end
 
+-- Draw the pause menu
 function PauseMenu:draw(score)
-    -- Create semi-transparent overlay
-    love.graphics.setColor(0, 0, 0, 0.5)
-    love.graphics.rectangle("fill", 0, 0, constants.WINDOW_WIDTH, constants.WINDOW_HEIGHT)
+    self:draw_overlay()
     
-    -- Only handle mouse if terminal is not active
     if not (terminal and terminal.active) then
         local mx, my = love.mouse.getPosition()
         self:handle_mouse(mx, my)
     end
     
-    -- Draw "PAUSED" title with shadow
-    love.graphics.setFont(self.title_font)
-    -- Shadow
-    love.graphics.setColor(constants.DARK_GREEN)
-    love.graphics.print('PAUSED',
-        constants.WINDOW_WIDTH/2 - self.title_font:getWidth('PAUSED')/2 + 2,
-        constants.WINDOW_HEIGHT/4 + 2)
-    -- Main text
-    love.graphics.setColor(constants.SNAKE_GREEN)
-    love.graphics.print('PAUSED',
-        constants.WINDOW_WIDTH/2 - self.title_font:getWidth('PAUSED')/2,
-        constants.WINDOW_HEIGHT/4)
+    self:draw_title()
+    self:draw_score(score)
+    self:draw_menu_options()
     
-    -- Draw score
+    love.graphics.setColor(1, 1, 1, 1)  -- Reset color
+end
+
+-- Draw semi-transparent overlay
+function PauseMenu:draw_overlay()
+    love.graphics.setColor(0, 0, 0, 0.5)
+    love.graphics.rectangle("fill", 0, 0, constants.WINDOW_WIDTH, constants.WINDOW_HEIGHT)
+end
+
+-- Draw the "PAUSED" title
+function PauseMenu:draw_title()
+    love.graphics.setFont(self.title_font)
+    local text = 'PAUSED'
+    local x = constants.WINDOW_WIDTH/2 - self.title_font:getWidth(text)/2
+    local y = constants.WINDOW_HEIGHT * UI.TITLE.Y_POSITION
+    
+    -- Draw shadow
+    love.graphics.setColor(constants.DARK_GREEN)
+    love.graphics.print(text, x + UI.TITLE.SHADOW_OFFSET, y + UI.TITLE.SHADOW_OFFSET)
+    
+    -- Draw main text
+    love.graphics.setColor(constants.SNAKE_GREEN)
+    love.graphics.print(text, x, y)
+end
+
+-- Draw the current score
+function PauseMenu:draw_score(score)
     love.graphics.setFont(self.score_font)
     love.graphics.setColor(1, 1, 1)
-    local score_text = "Score: " .. score
-    love.graphics.print(score_text,
-        constants.WINDOW_WIDTH/2 - self.score_font:getWidth(score_text)/2,
-        constants.WINDOW_HEIGHT/2)
-    
-    -- Draw menu options
+    local text = "Score: " .. score
+    love.graphics.print(text,
+        constants.WINDOW_WIDTH/2 - self.score_font:getWidth(text)/2,
+        constants.WINDOW_HEIGHT * UI.SCORE.Y_POSITION)
+end
+
+-- Draw menu options with animations
+function PauseMenu:draw_menu_options()
     for i = 1, #self.options do
-        local base_size = 24
         local scale = self.option_scales[i]
-        local scaled_size = math.floor(base_size * scale)
+        local scaled_size = math.floor(UI.MENU.BASE_FONT_SIZE * scale)
         local scaled_font = love.graphics.newFont(constants.FONT_PATH, scaled_size)
         
         love.graphics.setFont(scaled_font)
@@ -298,29 +331,19 @@ function PauseMenu:draw(score)
         
         local text = self.options[i]
         local text_width = scaled_font:getWidth(text)
-        local text_x = constants.WINDOW_WIDTH/2 - text_width/2
-        local text_y = constants.WINDOW_HEIGHT/2 + 60 + (i-1) * 60
+        local x = constants.WINDOW_WIDTH/2 - text_width/2
+        local y = constants.WINDOW_HEIGHT/2 + 60 + (i-1) * UI.MENU.SPACING
         
-        -- Draw selection arrows if this option is selected
+        -- Draw selection arrows
         if i == self.selected then
-            local arrow_padding = 20 * scale
-            local arrow_left = ">"
-            local arrow_right = "<"
-            
-            love.graphics.print(arrow_left,
-                text_x - arrow_padding - scaled_font:getWidth(arrow_left),
-                text_y)
-            love.graphics.print(arrow_right,
-                text_x + text_width + arrow_padding,
-                text_y)
+            local arrow_padding = UI.MENU.ARROW_PADDING * scale
+            love.graphics.print(">", x - arrow_padding - scaled_font:getWidth(">"), y)
+            love.graphics.print("<", x + text_width + arrow_padding, y)
         end
         
-        -- Draw the menu option text
-        love.graphics.print(text, text_x, text_y)
+        -- Draw option text
+        love.graphics.print(text, x, y)
     end
-    
-    -- Reset color
-    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return PauseMenu

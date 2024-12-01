@@ -1,85 +1,96 @@
--- Heads-Up Display (HUD) implementation for the snake game
--- Handles score display and other HUD elements
+-- HUD Module --
 
 local constants = require("src.constants")
 
+-- HUD configuration constants
+local UI = {
+    SCORE = {
+        FONT_SIZE = 16,
+        DEFAULT_POSITION = {x = 20, y = 20},
+        SHADOW_OFFSET = 2,
+        ANIMATION = {
+            DURATION = 0.3,    -- Duration in seconds
+            MAX_SCALE = 1.3    -- Maximum scale during bounce
+        }
+    }
+}
+
+-- Heads-Up Display class for rendering game information
 local HUD = {}
 HUD.__index = HUD
 
+-- Initialize a new HUD instance with required fonts and animation state
 function HUD.new()
     local self = setmetatable({}, HUD)
-    -- Load font
-    self.score_font = love.graphics.newFont(constants.FONT_PATH, 16)
-    -- Score animation
+    -- Initialize font and animation state
+    self.score_font = love.graphics.newFont(constants.FONT_PATH, UI.SCORE.FONT_SIZE)
     self.score_scale = 1.0
     self.score_animation_time = 0
-    self.score_animation_duration = 0.3  -- Duration in seconds
+    self.score_animation_duration = UI.SCORE.ANIMATION.DURATION
     return self
 end
 
+-- Update animation states based on time
 function HUD:update(dt)
-    -- Update score animation
+    self:update_score_animation(dt)
+end
+
+-- Trigger the score bounce animation
+function HUD:trigger_score_animation()
+    self.score_animation_time = self.score_animation_duration
+end
+
+-- Draw all HUD elements
+function HUD:draw(game_data)
+    self:draw_score(game_data.score)
+    love.graphics.setColor(1, 1, 1, 1)  -- Reset color
+end
+
+-- Private helper functions
+
+-- Update the score bounce animation state
+function HUD:update_score_animation(dt)
     if self.score_animation_time > 0 then
         self.score_animation_time = math.max(0, self.score_animation_time - dt)
         local progress = self.score_animation_time / self.score_animation_duration
         -- Elastic easing out for a bouncy effect
-        local scale = 1 + math.sin(progress * math.pi) * 0.3
-        self.score_scale = scale
+        local bounce_scale = 1 + math.sin(progress * math.pi) * (UI.SCORE.ANIMATION.MAX_SCALE - 1)
+        self.score_scale = bounce_scale
     else
         self.score_scale = 1.0
     end
 end
 
-function HUD:trigger_score_animation()
-    self.score_animation_time = self.score_animation_duration
-end
-
+-- Draw the score with shadow and animation effects
 function HUD:draw_score(score, position)
-    -- Draw the score with a shadow effect at the specified position
-    position = position or {x = 20, y = 20}  -- Default position
+    position = position or UI.SCORE.DEFAULT_POSITION
     local score_text = "Score: " .. score
     
-    -- Calculate scaled dimensions
+    -- Calculate dimensions for centered scaling
     local text_width = self.score_font:getWidth(score_text)
     local text_height = self.score_font:getHeight()
-    local scale_x = self.score_scale
-    local scale_y = self.score_scale
-    
-    -- Calculate center position for scaling
     local center_x = position.x + text_width/2
     local center_y = position.y + text_height/2
     
-    -- Save current transform
+    -- Set up transformation for animation
     love.graphics.push()
-    
-    -- Move to center, scale, then move back
     love.graphics.translate(center_x, center_y)
-    love.graphics.scale(scale_x, scale_y)
+    love.graphics.scale(self.score_scale, self.score_scale)
     love.graphics.translate(-center_x, -center_y)
     
-    -- Draw shadow
+    -- Draw text shadow
     love.graphics.setFont(self.score_font)
     love.graphics.setColor(constants.BLACK)
     love.graphics.print(score_text, 
-        position.x + 2,  -- Shadow offset x
-        position.y + 2)  -- Shadow offset y
+        position.x + UI.SCORE.SHADOW_OFFSET,
+        position.y + UI.SCORE.SHADOW_OFFSET)
     
     -- Draw main text
     love.graphics.setColor(constants.WHITE)
     love.graphics.print(score_text, position.x, position.y)
     
-    -- Restore transform
+    -- Restore original transformation
     love.graphics.pop()
-end
-
-function HUD:draw(game_data)
-    -- Draw all HUD elements
-    -- Args:
-    --     game_data: Table containing game information (score, etc.)
-    self:draw_score(game_data.score)
-    
-    -- Reset color
-    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return HUD
