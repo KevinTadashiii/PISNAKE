@@ -6,7 +6,6 @@ local GameState = require('src.state.game_state')
 local Terminal = require('src.terminal')
 local Transition = require('src.transition')
 
--- Game states
 local States = {
     MENU = "menu",
     PLAYING = "playing",
@@ -14,110 +13,163 @@ local States = {
     SETTINGS = "settings"
 }
 
--- Global game state
+local state_handlers = {}
 local current_state = States.MENU
-local menu = nil
-local instructions = nil
-local settings = nil
-local game = nil
-local terminal = nil
 local transition = nil
-local is_paused = false
-local next_state = nil  -- Used to store the next state during transition
+local terminal = nil
+
+local state_objects = {
+    menu = nil,
+    instructions = nil,
+    settings = nil,
+    game = nil
+}
+
+local function transition_to(new_state, callback)
+    if transition and not transition:isActive() then
+        transition:start_transition(function()
+            current_state = new_state
+            if callback then callback() end
+        end)
+    end
+end
+
+state_handlers[States.MENU] = {
+    update = function(dt)
+        local menu_next = state_objects.menu:update(dt)
+        if menu_next and not transition.active then
+            if menu_next == "play" then
+                transition_to(States.PLAYING, function()
+                    state_objects.game:reset_game()
+                end)
+            elseif menu_next == "instructions" then
+                transition_to(States.INSTRUCTIONS)
+            elseif menu_next == "settings" then
+                transition_to(States.SETTINGS)
+            elseif menu_next == "quit" then
+                transition_to(nil, function()
+                    love.event.quit()
+                end)
+            end
+        end
+    end,
+    draw = function()
+        state_objects.menu:draw()
+    end,
+    keypressed = function(key)
+        local result = state_objects.menu:keypressed(key)
+        if result then
+            if result == "Play" then
+                transition_to(States.PLAYING, function()
+                    state_objects.game = GameState.new()
+                end)
+            elseif result == "Instructions" then
+                transition_to(States.INSTRUCTIONS)
+            elseif result == "Settings" then
+                transition_to(States.SETTINGS)
+            elseif result == "Quit" then
+                transition_to(nil, function()
+                    love.event.quit()
+                end)
+            end
+        end
+    end
+}
+
+state_handlers[States.PLAYING] = {
+    update = function(dt)
+        local game_next = state_objects.game:update(dt)
+        if game_next == "menu" and not transition.active then
+            transition_to(States.MENU)
+        end
+    end,
+    draw = function()
+        state_objects.game:draw()
+    end,
+    keypressed = function(key)
+        if state_objects.game:keypressed(key) == "menu" then
+            transition_to(States.MENU)
+        end
+    end
+}
+
+state_handlers[States.INSTRUCTIONS] = {
+    update = function(dt)
+        if state_objects.instructions:update(dt) and not transition.active then
+            transition_to(States.MENU)
+        end
+    end,
+    draw = function()
+        state_objects.instructions:draw()
+    end,
+    keypressed = function(key)
+        if state_objects.instructions:keypressed(key) then
+            transition_to(States.MENU)
+        end
+    end
+}
+
+state_handlers[States.SETTINGS] = {
+    update = function(dt)
+        if state_objects.settings:update(dt) and not transition.active then
+            transition_to(States.MENU, function()
+                state_objects.menu:update_hover_sounds()
+            end)
+        end
+    end,
+    draw = function()
+        state_objects.settings:draw()
+    end,
+    keypressed = function(key)
+        if state_objects.settings:keypressed(key) then
+            transition_to(States.MENU, function()
+                state_objects.menu:update_hover_sounds()
+            end)
+        end
+    end
+}
 
 function love.load()
-    -- Set up window
     love.window.setMode(constants.WINDOW_WIDTH, constants.WINDOW_HEIGHT)
-    love.window.setTitle("PIsnake")
+    love.window.setTitle("PISNAKE")
     
-    -- Initialize menu, instructions, and settings
-    menu = Menu.new()
-    instructions = Instructions.new()
-    settings = Settings.new()
-    game = GameState.new()
+    state_objects.menu = Menu.new()
+    state_objects.instructions = Instructions.new()
+    state_objects.settings = Settings.new()
+    state_objects.game = GameState.new()
     terminal = Terminal.new()
     transition = Transition.new()
 end
 
 function love.update(dt)
-    -- Update transition first
     if transition then
         transition:update(dt)
     end
     
-    -- Skip all updates when terminal is active
     if (terminal and terminal.active) or (transition and transition:isActive()) then
         return
     end
 
-    -- Handle state updates
-    if current_state == States.MENU then
-        local menu_next = menu:update(dt)
-        if menu_next and not transition.active then
-            if menu_next == "play" then
-                transition:start_transition(function()
-                    current_state = States.PLAYING
-                    game:reset_game()
-                end)
-            elseif menu_next == "instructions" then
-                transition:start_transition(function()
-                    current_state = States.INSTRUCTIONS
-                end)
-            elseif menu_next == "settings" then
-                transition:start_transition(function()
-                    current_state = States.SETTINGS
-                end)
-            elseif menu_next == "quit" then
-                transition:start_transition(function()
-                    love.event.quit()
-                end)
-            end
-        end
-    elseif current_state == States.PLAYING then
-        local game_next = game:update(dt)
-        if game_next == "menu" and not transition.active then
-            transition:start_transition(function()
-                current_state = States.MENU
-            end)
-        end
-    elseif current_state == States.INSTRUCTIONS then
-        if instructions:update(dt) and not transition.active then
-            transition:start_transition(function()
-                current_state = States.MENU
-            end)
-        end
-    elseif current_state == States.SETTINGS then
-        if settings:update(dt) and not transition.active then
-            transition:start_transition(function()
-                current_state = States.MENU
-                menu:update_hover_sounds()
-            end)
-        end
+    local current_handler = state_handlers[current_state]
+    if current_handler and current_handler.update then
+        current_handler.update(dt)
     end
 end
 
 function love.draw()
-    if current_state == States.MENU then
-        menu:draw()
-    elseif current_state == States.PLAYING then
-        game:draw()
-    elseif current_state == States.INSTRUCTIONS then
-        instructions:draw()
-    elseif current_state == States.SETTINGS then
-        settings:draw()
+    local current_handler = state_handlers[current_state]
+    if current_handler and current_handler.draw then
+        current_handler.draw()
     end
     
-    -- Draw terminal on top if active
     if terminal then
         terminal:draw()
     end
 
-    -- Draw transition effect on top of everything
     if transition then
         transition:draw()
     end
 
-    -- Draw pause indicator when terminal is open and game is playing
     if terminal and terminal.active and current_state == States.PLAYING then
         love.graphics.setColor(1, 1, 1, 0.8)
         love.graphics.printf("GAME PAUSED", 0, constants.WINDOW_HEIGHT / 2 + 50, constants.WINDOW_WIDTH, "center")
@@ -125,12 +177,10 @@ function love.draw()
 end
 
 function love.keypressed(key)
-    -- Block all keyboard interactions during transition
     if transition and transition:isActive() then
         return
     end
     
-    -- Check for terminal toggle first
     if key == "`" then
         if terminal then
             terminal:toggle()
@@ -138,138 +188,85 @@ function love.keypressed(key)
         return
     end
     
-    -- If terminal is active, handle its input only
     if terminal and terminal.active then
         terminal:keypressed(key)
         return
     end
     
-    if current_state == States.MENU then
-        local result = menu:keypressed(key)
-        if result == "Play" then
-            transition:start_transition(function()
-                current_state = States.PLAYING
-                game = GameState.new()
-            end)
-        elseif result == "Instructions" then
-            transition:start_transition(function()
-                current_state = States.INSTRUCTIONS
-            end)
-        elseif result == "Settings" then
-            transition:start_transition(function()
-                current_state = States.SETTINGS
-            end)
-        elseif result == "Quit" then
-            transition:start_transition(function()
-                love.event.quit()
-            end)
-        end
-    elseif current_state == States.PLAYING then
-        if game:keypressed(key) == "menu" then
-            transition:start_transition(function()
-                current_state = States.MENU
-            end)
-        end
-    elseif current_state == States.INSTRUCTIONS then
-        if instructions:keypressed(key) then
-            transition:start_transition(function()
-                current_state = States.MENU
-            end)
-        end
-    elseif current_state == States.SETTINGS then
-        if settings:keypressed(key) then
-            transition:start_transition(function()
-                current_state = States.MENU
-                menu:update_hover_sounds()
-            end)
-        end
+    local current_handler = state_handlers[current_state]
+    if current_handler and current_handler.keypressed then
+        current_handler.keypressed(key)
     end
 end
 
 function love.mousepressed(x, y, button)
-    -- Block all mouse interactions during transition
     if transition and transition:isActive() then
         return
     end
     
-    -- Skip mouse input if terminal is active
     if terminal and terminal.active then
         return
     end
 
     if current_state == States.MENU then
-        local result = menu:handle_mousepressed(x, y, button)
+        local result = state_objects.menu:handle_mousepressed(x, y, button)
         if result == "Play" then
-            transition:start_transition(function()
-                current_state = States.PLAYING
-                game = GameState.new()
+            transition_to(States.PLAYING, function()
+                state_objects.game = GameState.new()
             end)
         elseif result == "Instructions" then
-            transition:start_transition(function()
-                current_state = States.INSTRUCTIONS
-            end)
+            transition_to(States.INSTRUCTIONS)
         elseif result == "Settings" then
-            transition:start_transition(function()
-                current_state = States.SETTINGS
-            end)
+            transition_to(States.SETTINGS)
         elseif result == "Quit" then
-            transition:start_transition(function()
+            transition_to(nil, function()
                 love.event.quit()
             end)
         end
     elseif current_state == States.PLAYING then
-        -- Forward mouse input to game state
-        if game:mousepressed(x, y, button) == "menu" then
-            transition:start_transition(function()
-                current_state = States.MENU
-            end)
+        if state_objects.game:mousepressed(x, y, button) == "menu" then
+            transition_to(States.MENU)
         end
     elseif current_state == States.INSTRUCTIONS then
-        if instructions:mousepressed(x, y, button) then
-            transition:start_transition(function()
-                current_state = States.MENU
-            end)
+        if state_objects.instructions:mousepressed(x, y, button) then
+            transition_to(States.MENU)
         end
     elseif current_state == States.SETTINGS then
-        if settings:mousepressed(x, y, button) then
-            transition:start_transition(function()
-                current_state = States.MENU
-                menu:update_hover_sounds()
+        if state_objects.settings:mousepressed(x, y, button) then
+            transition_to(States.MENU, function()
+                state_objects.menu:update_hover_sounds()
             end)
         end
     end
 end
 
 function love.mousemoved(x, y)
-    -- Skip mouse movement if terminal is active
     if terminal and terminal.active then
         return
     end
 
     if current_state == States.MENU then
-        menu:mousemoved(x, y)
+        state_objects.menu:mousemoved(x, y)
     elseif current_state == States.PLAYING then
-        -- Forward mouse movement to game state
-        game:mousemoved(x, y)
+        state_objects.game:mousemoved(x, y)
     elseif current_state == States.INSTRUCTIONS then
-        instructions:handle_mouse_move(x, y)
+        state_objects.instructions:handle_mouse_move(x, y)
     elseif current_state == States.SETTINGS then
-        settings:mousemoved(x, y)
+        state_objects.settings:mousemoved(x, y)
     end
 end
 
 function love.mousereleased(x, y, button)
-    -- Skip mouse release if terminal is active
     if terminal and terminal.active then
         return
     end
 
     if current_state == States.MENU then
-        menu:mousereleased(x, y, button)
+        state_objects.menu:mousereleased(x, y, button)
     elseif current_state == States.PLAYING then
-        game:mousereleased(x, y, button)
+        state_objects.game:mousereleased(x, y, button)
     elseif current_state == States.SETTINGS then
-        settings:mousereleased(x, y, button)
+        state_objects.settings:mousereleased(x, y, button)
     end
 end
 
