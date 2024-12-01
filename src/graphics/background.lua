@@ -7,12 +7,12 @@ function Particle.new(x, y)
     local self = setmetatable({}, Particle)
     self.x = x
     self.y = y
-    self.size = love.math.random(2, 4)
+    self.size = love.math.random(2, 5)  -- Increased size range (was 1-3)
     self.color = {0, love.math.random(50, 150) / 255, 0}
-    self.speed = love.math.random() * 1.5 + 0.5  -- random between 0.5 and 2
+    self.speed = love.math.random() * 0.5 + 0.2
     self.angle = love.math.random() * math.pi * 2
-    self.lifetime = love.math.random(30, 90)
-    self.alpha = 1.0  -- LÖVE uses 0-1 for alpha
+    self.lifetime = love.math.random(60, 120)
+    self.alpha = 0.7
     return self
 end
 
@@ -20,7 +20,7 @@ function Particle:update()
     self.x = self.x + math.cos(self.angle) * self.speed
     self.y = self.y + math.sin(self.angle) * self.speed
     self.lifetime = self.lifetime - 1
-    self.alpha = self.lifetime / 90
+    self.alpha = self.lifetime / 120
     return self.lifetime > 0
 end
 
@@ -36,6 +36,7 @@ local instance = nil
 
 function BackgroundManager.new()
     if instance then
+        -- Just return the existing instance without modifying it
         return instance
     end
 
@@ -54,7 +55,7 @@ function BackgroundManager.new()
     -- Initialize particles
     self.particles = {}
     self.last_particle_time = love.timer.getTime()
-    self.particle_delay = 0.1
+    self.particle_delay = 0.3
     
     -- Border visibility flag
     self.show_border = false
@@ -149,8 +150,28 @@ function BackgroundManager:update(dt)
         end
     end
     
-    -- Update grid color transition
-    self.color_transition = self.color_transition + dt * self.color_change_speed
+    -- Spawn random particles across the screen
+    if current_time - self.last_particle_time >= self.particle_delay then
+        -- Spawn snake trail particle
+        if self.bg_snake_pos[1] then
+            table.insert(self.particles, Particle.new(
+                self.bg_snake_pos[1].x * constants.GRID_SIZE,
+                self.bg_snake_pos[1].y * constants.GRID_SIZE
+            ))
+        end
+        
+        -- Spawn 1 random particle anywhere on screen
+        local random_x = love.math.random() * constants.WINDOW_WIDTH
+        local random_y = love.math.random() * constants.WINDOW_HEIGHT
+        table.insert(self.particles, Particle.new(random_x, random_y))
+        
+        self.last_particle_time = current_time
+    end
+
+    -- Update grid color transition with fixed time step
+    self.color_transition = self.color_transition + self.color_change_speed * dt
+    
+    -- When transition completes, reset and move to next color
     if self.color_transition >= 1 then
         self.color_transition = 0
         self.current_grid_colors = (self.current_grid_colors % #self.grid_colors) + 1
