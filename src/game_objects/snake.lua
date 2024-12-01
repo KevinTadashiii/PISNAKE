@@ -108,17 +108,24 @@ function Snake:draw()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function Snake:drawRetro()
-    for i, pos in ipairs(self.positions) do
-        local x = constants.OFFSET_X + (pos[1] * constants.GRID_SIZE) + constants.SNAKE_PADDING
-        local y = constants.OFFSET_Y + (pos[2] * constants.GRID_SIZE) + constants.SNAKE_PADDING
-        local width = constants.GRID_SIZE - (2 * constants.SNAKE_PADDING)
-        local height = constants.GRID_SIZE - (2 * constants.SNAKE_PADDING)
-        
-        love.graphics.setColor(i == 1 and {1, 1, 1} or {0.8, 0.8, 0.8})
-        love.graphics.rectangle('fill', x, y, width, height)
+function Snake:contains_position(pos)
+    for _, snake_pos in ipairs(self.positions) do
+        if snake_pos[1] == pos[1] and snake_pos[2] == pos[2] then
+            return true
+        end
     end
-    love.graphics.setColor(1, 1, 1, 1)
+    return false
+end
+
+function Snake:reset()
+    self.positions = {{math.floor(constants.GRID_WIDTH / 2), math.floor(constants.GRID_HEIGHT / 2)}}
+    self.direction = {1, 0}
+    self.next_direction = {1, 0}
+    self.length = 1
+    self.rainbow_mode = false
+    self.score = 0
+    self.move_delay = constants.MOVE_DELAY
+    self.last_move_time = 0
 end
 
 function Snake:grow()
@@ -134,32 +141,11 @@ function Snake:setDirection(new_dir)
     end
 end
 
-function Snake:reset()
-    self.positions = {{math.floor(constants.GRID_WIDTH / 2), math.floor(constants.GRID_HEIGHT / 2)}}
-    self.direction = {1, 0}
-    self.next_direction = {1, 0}
-    self.length = 1
-    self.rainbow_mode = false
-    self.rainbow_time = 0
-    self.score = 0
-    self.move_delay = constants.MOVE_DELAY
-    self.last_move_time = 0
-end
-
 function Snake:checkCollision()
     local head = self.positions[1]
     for i = 2, #self.positions do
         local pos = self.positions[i]
         if head[1] == pos[1] and head[2] == pos[2] then
-            return true
-        end
-    end
-    return false
-end
-
-function Snake:contains_position(pos)
-    for _, snake_pos in ipairs(self.positions) do
-        if snake_pos[1] == pos[1] and snake_pos[2] == pos[2] then
             return true
         end
     end
