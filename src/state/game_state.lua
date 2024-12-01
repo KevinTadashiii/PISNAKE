@@ -49,10 +49,20 @@ function GameState.new()
     self.score = 0
     self.game_over = false
     self.paused = false
+    self.waiting_to_start = true  -- New state for initial "press any key"
     self.retro_mode = false
     self.last_move_time = love.timer.getTime()
     self.retro_canvas = nil
     self.background_effect = BackgroundEffect.new()  -- Add background effect
+    
+    -- Initialize screen shake
+    self.shake = {
+        duration = 0,
+        magnitude = 0,
+        time = 0,
+        offset_x = 0,
+        offset_y = 0
+    }
     
     -- Initialize input handler
     self.input_handler = InputHandler.new(self)
@@ -61,12 +71,22 @@ function GameState.new()
 end
 
 function GameState:reset_game()
-    self.snake = Snake.new()
-    self.food = Food.new()
+    -- Reset game state
     self.score = 0
     self.game_over = false
     self.paused = false
+    self.waiting_to_start = true  -- Reset to waiting state
+    self.retro_mode = false
     self.last_move_time = love.timer.getTime()
+    
+    -- Reset game objects
+    self.snake:reset()
+    self.food:randomize_position()
+    
+    -- Reset easter eggs
+    if self.input_handler and self.input_handler.easter_eggs then
+        self.input_handler.easter_eggs:reset()
+    end
 end
 
 function GameState:update_sound_volumes()
@@ -97,6 +117,29 @@ function GameState:play_eat_sound()
 end
 
 function GameState:update(dt)
+    -- Update screen shake
+    if self.shake.duration > 0 then
+        self.shake.time = self.shake.time + dt
+        if self.shake.time >= self.shake.duration then
+            -- Reset shake
+            self.shake.duration = 0
+            self.shake.magnitude = 0
+            self.shake.time = 0
+            self.shake.offset_x = 0
+            self.shake.offset_y = 0
+        else
+            -- Calculate shake offset
+            local progress = self.shake.time / self.shake.duration
+            local damping = 1 - progress  -- Gradually reduce shake intensity
+            local angle = love.math.random() * math.pi * 2
+            self.shake.offset_x = math.cos(angle) * self.shake.magnitude * damping
+            self.shake.offset_y = math.sin(angle) * self.shake.magnitude * damping
+        end
+    end
+
+    -- Update HUD animations
+    self.hud:update(dt)
+
     if self.paused then
         -- Only update pause menu if terminal is not active
         if not (terminal and terminal.active) then
@@ -105,12 +148,31 @@ function GameState:update(dt)
         return true
     end
 
+    -- Don't update snake if waiting to start
+    if self.waiting_to_start then
+        -- Don't update anything while waiting to start
+        return true
+    end
+
     if not self.game_over and not self.paused then
         -- Update background effect
-        self.background_effect:update(dt)
+        local snake_dx, snake_dy = 0, 0
+        if self.snake.direction == "right" then
+            snake_dx = 1
+        elseif self.snake.direction == "left" then
+            snake_dx = -1
+        elseif self.snake.direction == "up" then
+            snake_dy = -1
+        elseif self.snake.direction == "down" then
+            snake_dy = 1
+        end
+        self.background_effect:update(dt, snake_dx, snake_dy)
         
         -- Update snake with dt
         if not self.snake:update(dt) then
+            -- Trigger screen shake on collision
+            self:start_shake(0.3, 10)  -- 0.3 seconds, magnitude 10
+            
             self.game_over = true
             self:update_sound_volumes()  -- Ensure volume is current
             self.game_over_sound:play()
@@ -119,11 +181,19 @@ function GameState:update(dt)
         -- Check for food collision
         local head = self.snake:getHeadPosition()
         if head[1] == self.food.position[1] and head[2] == self.food.position[2] then
-            self.snake.length = self.snake.length + 1
+            -- Play eat sound
+            self.eat_sounds[self.current_eat_sound]:play()
+            self.current_eat_sound = (self.current_eat_sound % #self.eat_sounds) + 1
+            
+            -- Update score and trigger animation
             self.score = self.score + 1
-            self:update_sound_volumes()  -- Ensure volume is current
-            self:play_eat_sound()
-             self.food:randomize_position()
+            self.hud:trigger_score_animation()
+            
+            -- Grow snake
+            self.snake.length = self.snake.length + 1
+            
+            -- Spawn new food
+            self.food:randomize_position()
             while self.snake:contains_position(self.food.position) do
                 self.food:randomize_position()
             end
@@ -132,14 +202,32 @@ function GameState:update(dt)
     return true
 end
 
+function GameState:start_shake(duration, magnitude)
+    self.shake.duration = duration
+    self.shake.magnitude = magnitude
+    self.shake.time = 0
+end
+
 function GameState:handle_input()
     return self.input_handler:handle_input()
 end
 
 function GameState:draw()
+    -- Apply screen shake offset
+    if self.shake.duration > 0 then
+        love.graphics.push()
+        love.graphics.translate(self.shake.offset_x, self.shake.offset_y)
+    end
+
     -- Create a canvas for retro mode if needed
     if self.retro_mode and not self.retro_canvas then
         self.retro_canvas = love.graphics.newCanvas(constants.WINDOW_WIDTH, constants.WINDOW_HEIGHT)
+    end
+    
+    if self.retro_mode then
+        -- Draw everything to the canvas first
+        love.graphics.setCanvas({self.retro_canvas, stencil=true})
+        love.graphics.clear()
     end
     
     -- Fill background with base color
@@ -152,16 +240,50 @@ function GameState:draw()
     -- Draw game grid
     self.grid:draw()
     
-    if self.retro_mode then
-        -- Draw everything to the canvas first
-        love.graphics.setCanvas(self.retro_canvas)
-        love.graphics.clear()
-    end
-    
     -- Draw game elements
     self.snake:draw()
     self.food:draw()
     self.hud:draw({score = self.score})
+    
+    -- Draw "Press any key to start" message if waiting
+    if self.waiting_to_start then
+        -- Draw semi-transparent overlay
+        love.graphics.setColor(0, 0, 0, 0.3)  -- Lighter overlay than game over
+        love.graphics.rectangle("fill", 0, 0, constants.WINDOW_WIDTH, constants.WINDOW_HEIGHT)
+        
+        -- Draw message box
+        love.graphics.setFont(love.graphics.newFont(constants.FONT_PATH, 20))
+        local text = "Press any key to start"
+        local text_width = love.graphics.getFont():getWidth(text)
+        local text_height = love.graphics.getFont():getHeight()
+        
+        -- Box dimensions
+        local padding = 20
+        local box_x = constants.WINDOW_WIDTH/2 - text_width/2 - padding
+        local box_y = constants.WINDOW_HEIGHT/2 - text_height/2 - padding/2 + 50  -- Moved down
+        local box_width = text_width + padding * 2
+        local box_height = text_height + padding
+        
+        -- Draw box fill
+        love.graphics.setColor(constants.DARK_GREEN)
+        love.graphics.rectangle("fill", box_x, box_y, box_width, box_height, 10)
+        
+        -- Draw box border
+        love.graphics.setColor(constants.SNAKE_GREEN)
+        love.graphics.setLineWidth(2)
+        love.graphics.rectangle("line", box_x, box_y, box_width, box_height, 10)
+        
+        -- Draw text with fade effect
+        local alpha = math.abs(math.sin(love.timer.getTime() * 3))
+        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.print(text,
+            constants.WINDOW_WIDTH/2 - text_width/2,
+            constants.WINDOW_HEIGHT/2 - text_height/2 + 50)  -- Moved down
+        
+        -- Reset color and line width
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setLineWidth(1)
+    end
     
     if self.paused then
         -- Process mouse hover for pause menu
@@ -176,15 +298,18 @@ function GameState:draw()
     end
     
     if self.retro_mode then
-        -- Switch back to the main canvas before applying effects
+        -- Switch back to the main canvas and apply grayscale effect
         love.graphics.setCanvas()
-        -- Draw the canvas with the grayscale shader
         love.graphics.setShader(self.grayscale_shader)
         love.graphics.draw(self.retro_canvas, 0, 0)
         love.graphics.setShader()
     else
-        -- Make sure we're drawing to the screen
         love.graphics.setCanvas()
+    end
+
+    -- Reset screen shake transform
+    if self.shake.duration > 0 then
+        love.graphics.pop()
     end
 end
 
@@ -195,6 +320,12 @@ function GameState:run()
 end
 
 function GameState:keypressed(key)
+    -- First, check if we're waiting to start
+    if self.waiting_to_start then
+        self.waiting_to_start = false
+        return false
+    end
+
     if self.game_over then
         if key == 'return' or key == 'space' then
             -- Reset game
