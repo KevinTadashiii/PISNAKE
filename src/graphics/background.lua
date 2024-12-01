@@ -82,7 +82,7 @@ function BackgroundManager.new()
     }
     self.current_grid_colors = 1
     self.color_transition = 0
-    self.color_change_speed = 0.02
+    self.color_change_speed = 0.1
     
     instance = self
     return self
