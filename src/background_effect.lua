@@ -61,7 +61,7 @@ function BackgroundEffect.new()
         table.insert(self.leaves, leaf)
     end
 
-    function self:update(dt)
+    function self:update(dt, snake_dx, snake_dy)
         self.time = self.time + dt
         self.spawn_timer = self.spawn_timer + dt
 
@@ -71,14 +71,26 @@ function BackgroundEffect.new()
             table.insert(self.leaves, create_leaf())
         end
 
+        -- Calculate snake movement influence (creates a wave effect)
+        local movement_influence = 0
+        if snake_dx and snake_dy then
+            movement_influence = math.abs(snake_dx) + math.abs(snake_dy)
+        end
+
         -- Update leaves
         for i = #self.leaves, 1, -1 do
             local leaf = self.leaves[i]
             
             -- Update position
             leaf.y = leaf.y + leaf.fall_speed * dt
-            leaf.x = leaf.initial_x + math.sin(self.time * leaf.sway_speed) * leaf.sway_amount
-            leaf.rotation = leaf.rotation + leaf.spin_speed * dt
+            
+            -- Add extra sway based on snake movement
+            local base_sway = math.sin(self.time * leaf.sway_speed) * leaf.sway_amount
+            local movement_sway = movement_influence * 30 * math.sin(self.time * 10 + leaf.y * 0.1)
+            leaf.x = leaf.initial_x + base_sway + movement_sway
+            
+            -- Add extra rotation based on snake movement
+            leaf.rotation = leaf.rotation + leaf.spin_speed * dt + movement_influence * math.sin(self.time * 5) * 2
 
             -- Start fading when leaf touches ground
             if leaf.y >= constants.WINDOW_HEIGHT - 10 and not leaf.fading then
