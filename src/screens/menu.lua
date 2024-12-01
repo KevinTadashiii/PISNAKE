@@ -16,7 +16,7 @@ function Menu.new()
     self.small_font = love.graphics.newFont(constants.FONT_PATH, 12)
     self.splash_font = love.graphics.newFont(constants.FONT_PATH, 10)
     self.splash_base_size = 10
-    self.version = "v1.5"
+    self.version = "v1.0"
 
     self.splash_texts = {}
     local content = love.filesystem.read("assets/data/splash_texts.txt")
