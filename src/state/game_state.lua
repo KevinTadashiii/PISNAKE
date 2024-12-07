@@ -1,13 +1,14 @@
--- Game state management for the snake game
--- Handles game state, score, and timing
+-- GameState Module --
 
 local constants = require("src.constants")
 local Snake = require("src.game_objects.snake")
 local Food = require("src.game_objects.food")
+
 local PauseMenu = require("src.ui.pause_menu")
 local GameOverScreen = require("src.ui.game_over")
 local HUD = require("src.ui.hud")
 local Grid = require("src.ui.grid")
+
 local InputHandler = require("src.input.input_handler")
 local SettingsManager = require("src.settings.settings_manager")
 local BackgroundEffect = require("src.background_effect")
@@ -15,18 +16,40 @@ local BackgroundEffect = require("src.background_effect")
 local GameState = {}
 GameState.__index = GameState
 
+-- Constructor for the GameState class.
+-- Initializes all game components and sets the initial game state.
 function GameState.new()
     local self = setmetatable({}, GameState)
     
+    -- Initialize components
+    self:initialize_ui_components()
+    self:initialize_settings_manager()
+    self:initialize_sounds()
+    self:initialize_shaders()
+    self:initialize_game_objects()
+    self:initialize_screen_shake()
+    self:initialize_input_handler()
+    
+    return self
+end
+
+-- Initializes UI components, including the pause menu, game over screen, HUD, and grid.
+function GameState:initialize_ui_components()
     -- Initialize UI components
     self.pause_menu = PauseMenu.new()
     self.game_over_screen = GameOverScreen.new()
     self.hud = HUD.new()
     self.grid = Grid.new()
-    
+end
+
+-- Initializes the settings manager, which handles game settings and preferences.
+function GameState:initialize_settings_manager()
     -- Initialize settings manager
     self.settings_manager = SettingsManager.new()
-    
+end
+
+-- Initializes sound effects, including the game over sound and eat sounds.
+function GameState:initialize_sounds()
     -- Load sound effects
     self.game_over_sound = love.audio.newSource(constants.GAME_OVER_SOUND_PATH, "static")
     
@@ -37,12 +60,18 @@ function GameState.new()
         self.eat_sounds[i] = love.audio.newSource(constants.EAT_SOUND_PATH, "static")
     end
     
-    -- Load grayscale shader
-    self.grayscale_shader = love.graphics.newShader("src/shaders/grayscale.glsl")
-    
     -- Update volumes
     self:update_sound_volumes()
-    
+end
+
+-- Initializes shaders, including the grayscale shader used for retro mode.
+function GameState:initialize_shaders()
+    -- Load grayscale shader
+    self.grayscale_shader = love.graphics.newShader("src/shaders/grayscale.glsl")
+end
+
+-- Initializes game objects, including the snake, food, and background effect.
+function GameState:initialize_game_objects()
     -- Initialize game objects and state
     self.snake = Snake.new()
     self.food = Food.new()
@@ -54,7 +83,10 @@ function GameState.new()
     self.last_move_time = love.timer.getTime()
     self.retro_canvas = nil
     self.background_effect = BackgroundEffect.new()  -- Add background effect
-    
+end
+
+-- Initializes screen shake, which is used to create a visual effect when the snake collides with something.
+function GameState:initialize_screen_shake()
     -- Initialize screen shake
     self.shake = {
         duration = 0,
@@ -63,13 +95,16 @@ function GameState.new()
         offset_x = 0,
         offset_y = 0
     }
-    
-    -- Initialize input handler
-    self.input_handler = InputHandler.new(self)
-    
-    return self
 end
 
+-- Initializes the input handler, which processes keyboard and mouse input.
+function GameState:initialize_input_handler()
+    -- Initialize input handler
+    self.input_handler = InputHandler.new(self)
+end
+
+-- Resets the game to its initial state.
+-- This includes resetting the score, game objects, and any active easter eggs.
 function GameState:reset_game()
     -- Reset game state
     self.score = 0
@@ -89,6 +124,8 @@ function GameState:reset_game()
     end
 end
 
+-- Updates the volume of the game's sound effects based on the current settings.
+-- This ensures that all sounds are played at the correct volume.
 function GameState:update_sound_volumes()
     local volume = self.settings_manager:get_setting('sound_volume') / 100.0
     self.game_over_sound:setVolume(0.7 * volume)
@@ -97,6 +134,8 @@ function GameState:update_sound_volumes()
     end
 end
 
+-- Plays a sound effect when the snake eats food.
+-- Utilizes a pool of sound sources to ensure sounds do not overlap.
 function GameState:play_eat_sound()
     -- Find a non-playing sound source
     local found = false
@@ -116,6 +155,8 @@ function GameState:play_eat_sound()
     end
 end
 
+-- Main update loop for the game state.
+-- Handles screen shake, updates game objects, and processes game logic based on the current state.
 function GameState:update(dt)
     -- Update screen shake
     if self.shake.duration > 0 then
@@ -155,7 +196,7 @@ function GameState:update(dt)
     end
 
     if not self.game_over and not self.paused then
-        -- Update background effect
+        -- Update background effect based on snake movement direction.
         local snake_dx, snake_dy = 0, 0
         if self.snake.direction == "right" then
             snake_dx = 1
@@ -182,8 +223,7 @@ function GameState:update(dt)
         local head = self.snake:getHeadPosition()
         if head[1] == self.food.position[1] and head[2] == self.food.position[2] then
             -- Play eat sound
-            self.eat_sounds[self.current_eat_sound]:play()
-            self.current_eat_sound = (self.current_eat_sound % #self.eat_sounds) + 1
+            self:play_eat_sound()
             
             -- Update score and trigger animation
             self.score = self.score + 1
@@ -202,16 +242,21 @@ function GameState:update(dt)
     return true
 end
 
+-- Starts a screen shake effect with the specified duration and magnitude.
 function GameState:start_shake(duration, magnitude)
     self.shake.duration = duration
     self.shake.magnitude = magnitude
     self.shake.time = 0
 end
 
+-- Handles keyboard input events.
+-- Processes interactions with the pause menu when the game is paused.
 function GameState:handle_input()
     return self.input_handler:handle_input()
 end
 
+-- Renders the game state to the screen.
+-- Applies visual effects like screen shake and draws all game components.
 function GameState:draw()
     -- Apply screen shake offset
     if self.shake.duration > 0 then
@@ -313,12 +358,14 @@ function GameState:draw()
     end
 end
 
+-- Note: In LÖVE, we don't need this method as the main loop is handled by love.update and love.draw
+-- This is left here for compatibility but should not be used
 function GameState:run()
-    -- Note: In LÖVE, we don't need this method as the main loop is handled by love.update and love.draw
-    -- This is left here for compatibility but should not be used
     return false
 end
 
+-- Handles keyboard input events.
+-- Processes interactions with the pause menu when the game is paused.
 function GameState:keypressed(key)
     -- First, check if we're waiting to start
     if self.waiting_to_start then
@@ -361,6 +408,8 @@ function GameState:keypressed(key)
     return false
 end
 
+-- Handles mouse input events.
+-- Processes interactions with the pause menu when the game is paused.
 function GameState:mousepressed(x, y, button)
     if self.paused then
         local result = self.pause_menu:mousepressed(x, y, button)
@@ -373,12 +422,16 @@ function GameState:mousepressed(x, y, button)
     return false
 end
 
+-- Handles mouse movement events.
+-- Processes interactions with the pause menu when the game is paused.
 function GameState:mousemoved(x, y)
     if self.paused then
         self.pause_menu:handle_mouse(x, y)
     end
 end
 
+-- Handles mouse release events.
+-- Processes interactions with the game over screen when the game is over.
 function GameState:mousereleased(x, y, button)
     if self.game_over then
         -- Check if click was in the retry/menu area

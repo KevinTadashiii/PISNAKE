@@ -1,7 +1,4 @@
---[[
-Input handling component for the snake game.
-Manages keyboard input and game state transitions.
-]]
+-- Input_handler Module --
 
 local constants = require('src.constants')
 local EasterEggs = require('src.input.easter_eggs')
@@ -9,32 +6,39 @@ local EasterEggs = require('src.input.easter_eggs')
 local InputHandler = {}
 InputHandler.__index = InputHandler
 
+--- Creates a new InputHandler instance
+-- @param game_state table: Reference to the game state to modify based on input
+-- @return table: New InputHandler instance
 function InputHandler.new(game_state)
-    -- Initialize the input handler.
-    -- Args:
-    --     game_state: Reference to the game state to modify based on input
     local self = setmetatable({}, InputHandler)
     self.game_state = game_state
     self.easter_eggs = EasterEggs.new()
     return self
 end
 
+--- Handles directional input for snake movement
+-- @param key string: The directional key that was pressed
 function InputHandler:handle_snake_movement(key)
-    -- Handle snake movement input
-    if key == 'up' then
-        self.game_state.snake:setDirection({0, -1})
-    elseif key == 'down' then
-        self.game_state.snake:setDirection({0, 1})
-    elseif key == 'left' then
-        self.game_state.snake:setDirection({-1, 0})
-    elseif key == 'right' then
-        self.game_state.snake:setDirection({1, 0})
+    local direction_map = {
+        up = {0, -1},
+        down = {0, 1},
+        left = {-1, 0},
+        right = {1, 0}
+    }
+    
+    if direction_map[key] then
+        self.game_state.snake:setDirection(direction_map[key])
     end
 end
 
+--- Handles mouse input events
+-- @param x number: Mouse X coordinate
+-- @param y number: Mouse Y coordinate
+-- @param button number: Mouse button that was pressed
+-- @return boolean: True if should return to menu
 function InputHandler:handle_mousepressed(x, y, button)
-    -- Handle mouse input
     if self.game_state.paused then
+        -- Process pause menu mouse interactions
         local result = self.game_state.pause_menu:handle_input(x, y, button)
         if result == 'Resume' then
             self.game_state.paused = false
@@ -45,57 +49,64 @@ function InputHandler:handle_mousepressed(x, y, button)
     return false
 end
 
+--- Processes pause menu input and state changes
+-- @param key string: The key that was pressed
+-- @return boolean: True if should return to menu
+function InputHandler:_handle_pause_menu(key)
+    local result = self.game_state.pause_menu:handle_input(key)
+    if result == 'Resume' then
+        self.game_state.paused = false
+    elseif result == 'Main Menu' then
+        return true
+    end
+    return false
+end
+
+--- Handles game state transitions based on keyboard input
+-- @param key string: The key that was pressed
+-- @return boolean: True if should return to menu
 function InputHandler:handle_keypressed(key)
-    -- Handle keyboard input
-    -- Returns:
-    --     bool: True if should return to menu, False otherwise
-    
-    -- Handle easter egg detection (should work even when paused)
+    -- Check for easter egg activation first (works even when paused)
     if self.easter_eggs:handle_input(key, self.game_state) then
         return false
     end
     
-    -- Handle pause menu input
+    -- Handle pause menu input if game is paused
     if self.game_state.paused then
-        local result = self.game_state.pause_menu:handle_input(key)
-        if result == 'Resume' then
-            self.game_state.paused = false
-        elseif result == 'Main Menu' then
-            return true
-        end
-        return false
+        return self:_handle_pause_menu(key)
     end
     
-    -- Toggle pause (only when game is not over)
+    -- Toggle pause state with escape key (only when game is active)
     if key == 'escape' and not self.game_state.game_over then
-        self.game_state.paused = not self.game_state.paused  -- Toggle pause state
+        self.game_state.paused = not self.game_state.paused
         return false
     end
     
-    -- Handle game over input
+    -- Handle game over screen input
     if self.game_state.game_over then
+        -- Process game over screen interactions
         if self.game_state.game_over_screen:handle_input(key, self.game_state) then
-            return false -- Restart the game
+            return false -- Game restarted
+        end
+        
+        -- Handle space key to restart game
+        if key == 'space' then
+            self.game_state.reset_game()
+            self.easter_eggs:reset() -- Reset easter eggs on game restart
         end
         return false
     end
     
-    -- Handle snake movement
+    -- Process snake movement when game is active
     if not self.game_state.paused and not self.game_state.game_over then
         self:handle_snake_movement(key)
-    end
-    
-    -- Handle game over space to restart
-    if self.game_state.game_over and key == 'space' then
-        self.game_state.reset_game()
-        self.easter_eggs:reset() -- Reset easter eggs when game resets
     end
     
     return false
 end
 
+--- Handles application quit event
 function InputHandler:handle_quit()
-    -- Handle quit event
     love.event.quit()
 end
 
