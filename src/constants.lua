@@ -33,6 +33,7 @@ constants.FONT_PATH = 'assets/fonts/PressStart2P.ttf'         -- Retro-style pix
 constants.GAME_OVER_SOUND_PATH = 'assets/sounds/gameover.wav' -- Sound played on game over
 constants.EAT_SOUND_PATH = 'assets/sounds/eat.wav'           -- Sound played when snake eats food
 constants.HOVER_SOUND_PATH = 'assets/sounds/hover.mp3'       -- Sound played on menu hover
+constants.APPLE_SPRITE_PATH = 'assets/sprites/Apple.png'     -- Apple sprite for food
 
 -- Color Definitions (RGB format, values from 0 to 1)
 -- Basic Colors
