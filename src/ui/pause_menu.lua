@@ -15,18 +15,23 @@ local UI = {
     TITLE = {
         FONT_SIZE = 36,
         Y_POSITION = 1/4,  -- Fraction of screen height
-        SHADOW_OFFSET = 2
+        SHADOW_OFFSET = 2,
+        PULSE_SPEED = 2,  -- Speed of the pulsing animation
+        PULSE_AMOUNT = 0.1  -- Amount of scale variation
     },
     SCORE = {
         FONT_SIZE = 16,
-        Y_POSITION = 1/2  -- Fraction of screen height
+        Y_POSITION = 1/2,  -- Fraction of screen height
+        FADE_SPEED = 2  -- Speed of the fade animation
     },
     ANIMATION = {
         HOVER_SCALE = 1.2,
         SCALE_SPEED = 0.2,
         COLOR_SPEED = 0.1,
         HOVER_SOUNDS = 3,  -- Number of sound sources for hover effect
-        SOUND_VOLUME_MULT = 1.4
+        SOUND_VOLUME_MULT = 1.4,
+        WAVE_SPEED = 3,  -- Speed of the wave animation
+        WAVE_AMOUNT = 5  -- Amount of vertical wave movement
     },
 }
 
@@ -45,6 +50,12 @@ function PauseMenu.new()
     self.keyboard_priority = false
     self.last_mx = nil
     self.last_my = nil
+    
+    -- Animation state
+    self.time = 0
+    self.wave_offset = 0
+    self.title_scale = 1.0
+    self.score_alpha = 1.0
     
     -- Load fonts
     self.title_font = love.graphics.newFont(constants.FONT_PATH, UI.TITLE.FONT_SIZE)
@@ -258,6 +269,19 @@ end
 
 -- Update menu animations
 function PauseMenu:update(dt)
+    -- Update animation time
+    self.time = self.time + dt
+    
+    -- Update title pulsing
+    self.title_scale = 1.0 + math.sin(self.time * UI.TITLE.PULSE_SPEED) * UI.TITLE.PULSE_AMOUNT
+    
+    -- Update wave animation
+    self.wave_offset = self.wave_offset + UI.ANIMATION.WAVE_SPEED * dt
+    
+    -- Update score fade
+    self.score_alpha = 0.7 + math.sin(self.time * UI.SCORE.FADE_SPEED) * 0.3
+    
+    -- Update option animations
     for i = 1, #self.options do
         -- Scale animation
         local scale_diff = self.target_scales[i] - self.option_scales[i]
@@ -297,22 +321,22 @@ end
 function PauseMenu:draw_title()
     love.graphics.setFont(self.title_font)
     local text = 'PAUSED'
-    local x = constants.WINDOW_WIDTH/2 - self.title_font:getWidth(text)/2
+    local x = constants.WINDOW_WIDTH/2 - self.title_font:getWidth(text)/2 * self.title_scale
     local y = constants.WINDOW_HEIGHT * UI.TITLE.Y_POSITION
     
-    -- Draw shadow
+    -- Draw shadow with pulsing effect
     love.graphics.setColor(constants.DARK_GREEN)
-    love.graphics.print(text, x + UI.TITLE.SHADOW_OFFSET, y + UI.TITLE.SHADOW_OFFSET)
+    love.graphics.print(text, x + UI.TITLE.SHADOW_OFFSET, y + UI.TITLE.SHADOW_OFFSET, 0, self.title_scale, self.title_scale)
     
-    -- Draw main text
+    -- Draw main text with pulsing effect
     love.graphics.setColor(constants.SNAKE_GREEN)
-    love.graphics.print(text, x, y)
+    love.graphics.print(text, x, y, 0, self.title_scale, self.title_scale)
 end
 
 -- Draw the current score
 function PauseMenu:draw_score(score)
     love.graphics.setFont(self.score_font)
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(1, 1, 1, self.score_alpha)
     local text = "Score: " .. score
     love.graphics.print(text,
         constants.WINDOW_WIDTH/2 - self.score_font:getWidth(text)/2,
@@ -331,17 +355,19 @@ function PauseMenu:draw_menu_options()
         
         local text = self.options[i]
         local text_width = scaled_font:getWidth(text)
+        local base_y = constants.WINDOW_HEIGHT/2 + 60 + (i-1) * UI.MENU.SPACING
+        local wave_offset = math.sin(self.wave_offset + i * 0.5) * UI.ANIMATION.WAVE_AMOUNT
         local x = constants.WINDOW_WIDTH/2 - text_width/2
-        local y = constants.WINDOW_HEIGHT/2 + 60 + (i-1) * UI.MENU.SPACING
+        local y = base_y + wave_offset
         
-        -- Draw selection arrows
+        -- Draw selection arrows with wave effect
         if i == self.selected then
             local arrow_padding = UI.MENU.ARROW_PADDING * scale
             love.graphics.print(">", x - arrow_padding - scaled_font:getWidth(">"), y)
             love.graphics.print("<", x + text_width + arrow_padding, y)
         end
         
-        -- Draw option text
+        -- Draw option text with wave effect
         love.graphics.print(text, x, y)
     end
 end
