@@ -381,14 +381,14 @@ function Menu:draw_splash_text()
 
     -- Scale down splash text if it's wider than the title
     local max_width = self.title_font:getWidth("PISNAKE") * self.title_scale * 0.8
-    local scale = 1.0
-    if total_width > max_width then
+    local scale = self.title_scale  -- Base scale matches title animation
+    if total_width * scale > max_width then
         scale = max_width / total_width
     end
 
     -- Draw letters with wave effect
     local current_x = constants.WINDOW_WIDTH / 2 - (total_width * scale) / 2
-    local base_y = constants.WINDOW_HEIGHT / 4 + self.title_font:getHeight()/2 + 12
+    local base_y = constants.WINDOW_HEIGHT / 4 + self.title_font:getHeight()/2 + 12 + self.title_y_offset
 
     local i = 1
     for p, c in utf8.codes(splash_text) do
