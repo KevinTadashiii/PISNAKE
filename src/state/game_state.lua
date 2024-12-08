@@ -3,15 +3,14 @@
 local constants = require("src.constants")
 local Snake = require("src.game_objects.snake")
 local Food = require("src.game_objects.food")
-
+local EatEffect = require("src.effects.eat_effect")  -- Add the new effect module
+local BackgroundEffect = require("src.background_effect")
+local InputHandler = require("src.input.input_handler")
+local SettingsManager = require("src.settings.settings_manager")
 local PauseMenu = require("src.ui.pause_menu")
 local GameOverScreen = require("src.ui.game_over")
 local HUD = require("src.ui.hud")
 local Grid = require("src.ui.grid")
-
-local InputHandler = require("src.input.input_handler")
-local SettingsManager = require("src.settings.settings_manager")
-local BackgroundEffect = require("src.background_effect")
 
 local GameState = {}
 GameState.__index = GameState
@@ -83,6 +82,7 @@ function GameState:initialize_game_objects()
     self.last_move_time = love.timer.getTime()
     self.retro_canvas = nil
     self.background_effect = BackgroundEffect.new()  -- Add background effect
+    self.eat_effect = EatEffect.new()  -- Initialize eat effect
 end
 
 -- Initializes screen shake, which is used to create a visual effect when the snake collides with something.
@@ -225,6 +225,9 @@ function GameState:update(dt)
             -- Play eat sound
             self:play_eat_sound()
             
+            -- Trigger eat effect at food position
+            self.eat_effect:trigger(self.food.position[1], self.food.position[2])
+            
             -- Update score and trigger animation
             self.score = self.score + 1
             self.hud:trigger_score_animation()
@@ -238,6 +241,9 @@ function GameState:update(dt)
                 self.food:randomize_position()
             end
         end
+        
+        -- Update eat effect
+        self.eat_effect:update(dt)
     end
     return true
 end
@@ -289,6 +295,7 @@ function GameState:draw()
     self.snake:draw()
     self.food:draw()
     self.hud:draw({score = self.score})
+    self.eat_effect:draw()  -- Draw eat effect
     
     -- Draw "Press any key to start" message if waiting
     if self.waiting_to_start then
